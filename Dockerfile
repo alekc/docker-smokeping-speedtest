@@ -5,10 +5,9 @@ ENV SMOKEPING_PROBES_DIR=/usr/share/smokeping/Smokeping/probes/
 COPY speedtest.Probe speedtest.Target /tmp/
 RUN apk update \
     && apk add --no-cache --virtual .setupdeps git curl tar \
-	&& apk add --no-cache speedtest-cli \
+	&& apk add --no-cache speedtest-cli gcompat \
     && curl -L https://install.speedtest.net/app/cli/ookla-speedtest-1.2.0-linux-x86_64.tgz | tar xz -C /usr/bin speedtest \
-    && # 2. Pre-accept licenses so Smokeping doesn't hang on first run \
-    speedtest --accept-license --accept-gdpr \
+    && speedtest --accept-license --accept-gdpr --servers \
     && git clone https://github.com/mad-ady/smokeping-speedtest.git ${SMOKEPING_SPEEDTEST_DIR} \
     && cp ${SMOKEPING_SPEEDTEST_DIR}*.pm ${SMOKEPING_PROBES_DIR} \
     && cat /tmp/speedtest.Probe >> /defaults/smoke-conf/Probes \
