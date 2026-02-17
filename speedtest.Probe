@@ -1,6 +1,6 @@
 ### from https://github.com/mad-ady/smokeping-speedtest
 + speedtest
-binary = /usr/local/bin/speedtest-cli
+binary = /usr/bin/speedtest-cli
 timeout = 300
 forks = 1
 step = 3600
