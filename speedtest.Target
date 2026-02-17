@@ -1,18 +1,34 @@
 # Speedtest targets for probe from https://github.com/mad-ady/smokeping-speedtest
 # Get the server id to by running speedtest-cli --list (possibly in the container)
-# 
-++ download_from_NextGen_Communications
-menu = download_from_NextGen_Communications
-title = download_from_NextGen_Communications
+#
+++++ download_from_NextGen_Communications_via_speedtest_cli
+menu = download_from_NextGen_Communications_via_speedtest_cli
+title = download_from_NextGen_Communications_via_speedtest_cli
 probe = speedtest-download
 server = 1737
 measurement = download
 host = dummy.com
 
-++ upload_to_NextGen_Communications
-menu = upload_to_NextGen_Communications
-title = upload_to_NextGen_Communications
+++++ upload_to_NextGen_Communications_via_speedtest_cli
+menu = upload_to_NextGen_Communications_via_speedtest_cli
+title = upload_to_NextGen_Communications_via_speedtest_cli
 probe = speedtest-upload
+server = 1737
+measurement = upload
+host = dummy.com
+
+++++ download_from_NextGen_Communications_via_speedtest_ookla
+menu = download_from_NextGen_Communications_via_speedtest_ookla
+title = download_from_NextGen_Communications_via_speedtest_ookla
+probe = speedtestcli-download
+server = 1737
+measurement = download
+host = dummy.com
+
+++++ upload_to_NextGen_Communications_via_speedtest_ookla
+menu = upload_to_NextGen_Communications_via_speedtest_ookla
+title = upload_to_NextGen_Communications_via_speedtest_ookla
+probe = speedtestcli-upload
 server = 1737
 measurement = upload
 host = dummy.com

@@ -1,7 +1,25 @@
 ### from https://github.com/mad-ady/smokeping-speedtest
-+ speedtest
++ speedtestcli
 binary = /usr/bin/speedtest-cli
 timeout = 300
+forks = 1
+step = 3600
+offset = random
+pings = 3
+
+++ speedtestcli-download
+measurement = download
+
+++ speedtestcli-upload
+measurement = upload
+
+++ speedtestcli-upload
+measurement = ping
+
++ speedtest
+binary = /usr/bin/speedtest
+timeout = 300
+forks = 1
 step = 3600
 offset = random
 pings = 3
@@ -11,4 +29,7 @@ measurement = download
 
 ++ speedtest-upload
 measurement = upload
+
+++ speedtest-upload
+measurement = ping
 
