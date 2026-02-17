@@ -24,12 +24,12 @@ use Sys::Syslog qw(:standard :macros);;
 sub pod_hash {
 	return {
 		name => <<DOC,
-Smokeping::probes::speedtest - Execute tests via Speedtest.net
+Smokeping::probes::speedtest - Execute tests via Speedtest.net (Ookla)
 DOC
 		description => <<DOC,
-Integrates L<speedtest-cli|https://github.com/sivel/speedtest-cli> as a probe into smokeping. The variable B<binary> must
-point to your copy of the speedtest-cli program. If it is not installed on
-your system yet, you should install the latest version from L<https://github.com/sivel/speedtest-cli>.
+Integrates L<speedtest|https://www.speedtest.net/apps/cli> (official Ookla client) as a probe into smokeping. The variable B<binary> must
+point to your copy of the speedtest program. If it is not installed on
+your system yet, you should install the latest version from L<https://www.speedtest.net/apps/cli>.
 
 The Probe asks for the given resource one time, ignoring the pings config variable (because pings can't be lower than 3).
 
@@ -59,11 +59,11 @@ sub new($$$)
         #check for dependencies
         my $call = "$self->{properties}{binary} --version";
         my $return = `$call 2>&1`;
-        if ($return =~ /([0-9\.]+)/){
+        if ($return =~ /speedtest ([0-9]+\.[0-9]+(?:\.[0-9]+)?(?:\.[0-9]+)?)/){
             print "### parsing $self->{properties}{binary} output... OK (version $1)\n";
             syslog("debug", "[Speedtest] Init: version $1");
         } else {
-            croak "ERROR: output of '$call' does not return a meaningful version number. Is speedtest-cli installed?\n";
+            croak "ERROR: output of '$call' does not return a meaningful version number. Is speedtest (Ookla) installed?\n";
         }
     };
 
@@ -75,8 +75,8 @@ sub probevars {
 	return $class->_makevars($class->SUPER::probevars, {
 		_mandatory => [ 'binary' ],
 		binary => {
-			_doc => "The location of your speedtest-cli binary.",
-			_example => '/usr/local/bin/speedtest-cli',
+			_doc => "The location of your speedtest binary (Ookla).",
+			_example => '/usr/bin/speedtest',
 			_sub => sub {
 				my $val = shift;
         			return "ERROR: speedtest 'binary' does not point to an executable"
@@ -90,21 +90,21 @@ sub probevars {
 sub targetvars {
 	my $class = shift;
 	return $class->_makevars($class->SUPER::targetvars, {
-		server => { _doc => "The server id you want to test against (optional). If unspecified, speedtest.net will select the closest server to you. The value has to be an id reported by the command speedtest-cli --list",
+		server => { _doc => "The server id you want to test against (optional). If unspecified, speedtest.net will select the closest server to you. The value has to be an id reported by the command speedtest -L",
 			    _example => "1234",
 		},
         measurement => { _doc => "What output do you want graphed? Supported values are: ping, download, upload",
                     _example => "download",
         },
-	extraargs => { _doc => "Append extra arguments to the speedtest-cli comand line",
-                    _example => "--secure",
+	extraargs => { _doc => "Append extra arguments to the speedtest command line",
+                    _example => "--interface=eth0",
         },
 	});
 }
 
 sub ProbeDesc($){
     my $self = shift;
-    return "speedtest.net download/upload speeds";
+    return "Ookla speedtest.net download/upload speeds";
 }
 
 sub ProbeUnit($){
@@ -124,7 +124,7 @@ sub pingone ($){
     my $server = $target->{vars}{server} || undef; #if server is not provided, use the default one recommended by speedtest.
     my $measurement = $target->{vars}{measurement} || "download"; #record download speeds if nothing is returned
     my $extra = $target->{vars}{extraargs} || ""; #append extra arguments if neded
-    my $query = "$self->{properties}{binary} ".((defined($server))?"--server $server":"")." ".(($measurement eq "download")?"--no-upload":"--no-download")." --simple $extra 2>&1";
+    my $query = "$self->{properties}{binary} ".((defined($server))?"--server-id=$server":"")." -f json --accept-license --accept-gdpr $extra 2>&1";
 
     my @times;
 
@@ -135,29 +135,41 @@ sub pingone ($){
 	while (<$outh>) {
         $self->do_debug("output: ".$_);
         syslog("debug", "[Speedtest] output: ".$_);
-	    if (/$measurement/i) {
-            #sample output:
-            #Ping: 2.826 ms
-            #Download: 898.13 Mbit/s
-            #Upload: 420.01 Mbit/s
 
-            my ($value, $unit) = /([0-9\.]+) ([A-Za-z\/]+)/;
-            #we're not always measuring seconds, but ProbeUnit() should provide the correct unit for the Y Axis
+        # Parse JSON output from Ookla speedtest
+        # {"ping":{"jitter":0.42,"latency":5.123},"download":{"bandwidth":112140288,"bytes":1234567,"elapsed":10001},"upload":{"bandwidth":56070144,"bytes":654321,"elapsed":9876}}
 
-            #normalize the units to be in the same base.
-            my $factor = 1;
-            $factor = 0.001 if($unit eq 'ms');
-            $factor = 1_000 if($unit eq 'Kbit/s' || $unit eq 'kbit/s');
-            $factor = 1_000_000 if($unit eq 'Mbit/s' || $unit eq 'mbit/s');
-            $factor = 1_000_000_000 if($unit eq 'Gbit/s' || $unit eq 'gbit/s');
-
-            my $normalizedvalue = $value * $factor;
-            $self->do_debug("Got value: $value, unit: $unit -> $normalizedvalue\n");
-            syslog("debug","[Speedtest] Got value: $value, unit: $unit -> $normalizedvalue\n");
-
-            push @times, $normalizedvalue;
-            last;
-	    }
+        if ($measurement eq "ping") {
+            # Extract ping latency in milliseconds
+            my ($value) = /"ping":\{"jitter":[0-9.]+,"latency":([0-9.]+)/;
+            if (defined $value) {
+                my $normalizedvalue = $value; # already in milliseconds
+                $self->do_debug("Got value: $value ms -> $normalizedvalue\n");
+                syslog("debug","[Speedtest] Got value: $value ms -> $normalizedvalue\n");
+                push @times, $normalizedvalue;
+                last;
+            }
+        } elsif ($measurement eq "download") {
+            # Extract download bandwidth in bytes/sec and convert to bits/sec
+            my ($value) = /"download":\{"bandwidth":([0-9]+)/;
+            if (defined $value) {
+                my $normalizedvalue = $value * 8; # convert bytes/sec to bits/sec
+                $self->do_debug("Got value: $value bytes/s -> $normalizedvalue bits/s\n");
+                syslog("debug","[Speedtest] Got value: $value bytes/s -> $normalizedvalue bits/s\n");
+                push @times, $normalizedvalue;
+                last;
+            }
+        } elsif ($measurement eq "upload") {
+            # Extract upload bandwidth in bytes/sec and convert to bits/sec
+            my ($value) = /"upload":\{"bandwidth":([0-9]+)/;
+            if (defined $value) {
+                my $normalizedvalue = $value * 8; # convert bytes/sec to bits/sec
+                $self->do_debug("Got value: $value bytes/s -> $normalizedvalue bits/s\n");
+                syslog("debug","[Speedtest] Got value: $value bytes/s -> $normalizedvalue bits/s\n");
+                push @times, $normalizedvalue;
+                last;
+            }
+        }
 	}
 	waitpid $pid,0;
 	close $errh;
